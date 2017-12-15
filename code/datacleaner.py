@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as et
 import os
 import json
+import collections
 def extract_senses(filename):
     tree = et.parse(filename)
     root = tree.getroot()
@@ -9,6 +10,7 @@ def extract_senses(filename):
     senses = set()
     for child in root:
         word =  child.attrib['text']
+        word = word.lower()
         vocab.add(word)
 
         if 'sense' in child.attrib:
@@ -16,19 +18,57 @@ def extract_senses(filename):
     
     return vocab, senses
 
+def extract_senses_top(filename, vocabmap):
+    tree = et.parse(filename)
+    root = tree.getroot()
+
+    vocab = set()
+    senses = set()
+    for child in root:
+        word =  child.attrib['text']
+        word = word.lower()
+        vocab.add(word)
+        
+        if 'sense' in child.attrib:
+            senses.add(child.attrib['sense'])
+            if word in vocabmap:
+                vocabmap[word].add(child.attrib['sense'])
+            else:
+                tset = set()
+                tset.add(child.attrib['sense'])
+                vocabmap[word] = tset
+    
+    return vocab, senses, vocabmap
+
+
 def extract_meta():
     vocab = set()
     sense = set()
+    vcmap = {}
     for subdir, dirs, files in os.walk('../rowdata'):
         for file in files:
             filename = os.path.join(subdir, file)
             if filename.endswith('.xml'):
-                v,s = extract_senses(filename)
+                v,s, vcmap = extract_senses_top(filename, vcmap)
             
                 vocab = vocab.union(v)
                 sense = sense.union(s)
 
+ 
+    ct = collections.Counter()
+    for word in vcmap:
+        ct[word] = len(vcmap[word])
 
+
+    sense = set()
+    tvocab = set()
+    for k,v in  ct.most_common(100):
+        tvocab.add(k)
+        sense  = sense.union(vcmap[k])
+
+    
+    vocab = get_words(tvocab)
+    print vocab
     vmap = {}
     i = 0
     for word in vocab:
@@ -47,9 +87,23 @@ def extract_meta():
 
     
     print len(vocab), len(sense)
- 
-    return vmap, smap
-def handle_sentence(filename, vmap, smap):
+
+    return vmap, smap, tvocab
+
+def get_words(tvocab):
+    vocab = set()
+    for subdir, dirs, files in os.walk('../rowdata'):
+        for file in files:
+            filename = os.path.join(subdir, file)
+            if filename.endswith('.xml'):
+                tmp = get_words_sentences(filename, tvocab)
+                vocab = vocab.union(tmp)
+
+
+    return vocab
+                
+                
+def get_words_sentences(filename,tvocab):
     tree = et.parse(filename)
     root = tree.getroot()
 
@@ -58,29 +112,112 @@ def handle_sentence(filename, vmap, smap):
     senses = []
     sentences = [] 
     prev = 'dummy'
+    flag = False
+
+    vocab = set()
+    tempvocab = set()
+    st = []
     for child in root:
         word =  child.attrib['text']
+        word = word.lower()
         if child.attrib['break_level'] == 'NO_BREAK' and prev != 'dummy':
             prev = "not dummy"
         elif child.attrib['break_level'] == 'NO_BREAK':
-            data.append(vmap[word])
-            if 'sense' in child.attrib:
+            prev = "not dummy" 
+            st.append(word)
+            tempvocab.add(word)
+            if word in tvocab:
+                flag = True
+       
+
+        elif child.attrib['break_level'] == 'SPACE_BREAK' or child.attrib['break_level'] == 'LINE_BREAK':
+            
+            st.append(word)
+            tempvocab.add(word)
+            if word in tvocab:
+                flag = True
+        else:
+            print filename, st
+            st = [] 
+            if flag :
+                vocab = vocab.union(tempvocab)
+            tempvocab = set()
+            flag = False
+            
+            tempvocab.add(word)
+            if word in tvocab:
+                flag = True
+      
+    return vocab 
+
+def handle_sentence(filename, vmap, smap, tvocab):
+    tree = et.parse(filename)
+    root = tree.getroot()
+
+    sense = []
+    data = []
+    senses = []
+    sentences = [] 
+    prev = 'dummy'
+    flag1 = True
+    flag2 = False
+    st = []
+    for child in root:
+        word =  child.attrib['text']
+        word = word.lower()
+        if child.attrib['break_level'] == 'NO_BREAK' and prev != 'dummy':
+            prev = "not dummy"
+        elif child.attrib['break_level'] == 'NO_BREAK':
+            prev = "not dummy"
+            if word in vmap:
+                data.append(vmap[word])
+                st.append(word)
+            else:
+                flag1 = False
+                continue
+
+            if 'sense' in child.attrib and child.attrib['sense'] in smap:
+                flag2 = True;
                 sense.append(smap[child.attrib['sense']])
             else:
                 sense.append(smap['O'])
        
 
         elif child.attrib['break_level'] == 'SPACE_BREAK':
-            data.append(vmap[word])
-            if 'sense' in child.attrib:
+            if word in vmap:
+                data.append(vmap[word])
+                st.append(word)
+            else:
+                flag1 = False
+                continue;
+            if 'sense' in child.attrib and child.attrib['sense'] in smap:
+                flag2 = True
                 sense.append(smap[child.attrib['sense']])
             else:
                 sense.append(smap['O'])
         else:
-            senses.append(sense)
-            sentences.append(data)
+            if flag1 and flag2:
+                senses.append(sense)
+                sentences.append(data)
+                print filename, st
+            flag1 = True
+            flag2 = False
             sense = []
             data = []
+            st = []
+            if word in vmap:
+                data.append(vmap[word])
+                st.append(word)
+            else:
+                flag1 = False
+                continue
+
+            if 'sense' in child.attrib and child.attrib['sense'] in smap:
+                flag2 = True
+                sense.append(smap[child.attrib['sense']])
+            else:
+                sense.append(smap['O'])
+       
             
 
         #print len(senses), len(sentences)
@@ -89,9 +226,9 @@ def handle_sentence(filename, vmap, smap):
 
 def extract_features():
     
-    vmap, smap = extract_meta()
+    vmap, smap, tvocab = extract_meta()
     print 'Extracted meta data'
-    print smap
+    print tvocab
     sl = []
     vl = []
     for subdir, dirs, files in os.walk('../rowdata'):
@@ -99,19 +236,21 @@ def extract_features():
             filename = os.path.join(subdir, file)
             if filename.endswith('.xml'):
                 print filename
-                senses, sentences = handle_sentence(filename, vmap, smap)
+                senses, sentences = handle_sentence(filename, vmap, smap, tvocab)
                 sl.extend(senses)
                 vl.extend(sentences)
                 print len(sl), len(vl), len(senses), len(sentences)
  
     json.dump(sl, open('../sl.json', 'w'))
-    json.dump(vl, open('../vl.json', 'w'))
+    json.dump(vl, open('../vl.json', 'w')) 
 
     a = json.load(open('../sl.json'))
     b = json.load(open('../vl.json'))
-
+    c = json.load(open('../vmap.json'))
+    d = json.load(open('../smap.json'))
     print len(a), len(b)
-
+    print len(c), len(d)
+    print c['the']
 
                
 extract_features()
