@@ -174,6 +174,9 @@ def get_words_sentences(filename,tvocab):
     return vocab 
 
 def handle_sentence_word2vec(filename, vmap, smap, tvocab):
+    words = ['star', 'planet','actor','frequency', 'fish', 'bass','music', 'sound', 'instrument', 'bank', 'finance', 'financial', 'financier', 'institute', 'slope', 'water', 'river']
+
+
     tree = et.parse(filename)
     root = tree.getroot()
 
@@ -192,7 +195,13 @@ def handle_sentence_word2vec(filename, vmap, smap, tvocab):
             prev = "not dummy"
         elif child.attrib['break_level'] == 'NO_BREAK':
             prev = "not dummy"
-            if word in vmap:
+            
+            if word in words and 'sense' in child.attrib and child.attrib['sense'] in smap:
+                flag2 = True
+                tword = word+str(smap[child.attrib['sense']])
+                data.append(vmap[tword])
+                st.append(tword)
+            elif word in vmap:
                 data.append(vmap[word])
                 st.append(word)
             else:
@@ -200,24 +209,34 @@ def handle_sentence_word2vec(filename, vmap, smap, tvocab):
                 continue
 
             if 'sense' in child.attrib and child.attrib['sense'] in smap:
-                flag2 = True;
+                flag2 = True
                 sense.append(smap[child.attrib['sense']])
             else:
                 sense.append(smap['O'])
        
 
         elif child.attrib['break_level'] == 'SPACE_BREAK':
-            if word in vmap:
+       
+            if word in words and 'sense' in child.attrib and child.attrib['sense'] in smap:
+                flag2 = True
+                tword = word+str(smap[child.attrib['sense']])
+                data.append(vmap[tword])
+                st.append(tword)
+            elif word in vmap:
                 data.append(vmap[word])
                 st.append(word)
             else:
                 flag1 = False
-                continue;
+                continue
+
             if 'sense' in child.attrib and child.attrib['sense'] in smap:
                 flag2 = True
                 sense.append(smap[child.attrib['sense']])
             else:
                 sense.append(smap['O'])
+       
+
+        
         else:
             if flag1 and flag2:
                 senses.append(sense)
@@ -228,7 +247,13 @@ def handle_sentence_word2vec(filename, vmap, smap, tvocab):
             sense = []
             data = []
             st = []
-            if word in vmap:
+       
+            if word in words and 'sense' in child.attrib and child.attrib['sense'] in smap:
+                flag2 = True
+                tword = word+str(smap[child.attrib['sense']])
+                data.append(vmap[tword])
+                st.append(tword)
+            elif word in vmap:
                 data.append(vmap[word])
                 st.append(word)
             else:
@@ -243,7 +268,7 @@ def handle_sentence_word2vec(filename, vmap, smap, tvocab):
        
             
 
-        #print len(senses), len(sentences)
+    print len(senses), len(sentences)
 #        print len(senses[0]), len(sentences[0])
     return (senses, sentences)
 
@@ -325,7 +350,7 @@ def handle_sentence(filename, vmap, smap, tvocab):
 def extract_features():
     
     vmap, smap, tvocab = extract_meta()
-    '''print 'Extracted meta data'
+    print 'Extracted meta data'
     print tvocab
     sl = []
     vl = []
@@ -334,15 +359,16 @@ def extract_features():
             filename = os.path.join(subdir, file)
             if filename.endswith('.xml'):
                 print filename
-                senses, sentences = handle_sentence(filename, vmap, smap, tvocab)
+                senses, sentences = handle_sentence_word2vec(filename, vmap, smap, tvocab)
                 sl.extend(senses)
                 vl.extend(sentences)
                 print len(sl), len(vl), len(senses), len(sentences)
  
-    json.dump(sl, open('../sl.json', 'w'))
-    json.dump(vl, open('../vl.json', 'w')) 
+    json.dump(sl, open('../slw2v.json', 'w'))
+    json.dump(vl, open('../vlw2v.json', 'w')) 
 
-    a = json.load(open('../sl.json'))
+    print len(vl)
+    '''a = json.load(open('../sl.json'))
     b = json.load(open('../vl.json'))
     c = json.load(open('../vmap.json'))
     d = json.load(open('../smap.json'))
